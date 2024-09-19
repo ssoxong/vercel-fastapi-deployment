@@ -46,10 +46,13 @@ import requests
 from fastapi.responses import PlainTextResponse
 import os
 from dotenv import load_dotenv
-
+from motor.motor_asyncio import AsyncIOMotorClient
 
 load_dotenv()
 
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb+srv://ssoxong:O510tE7q0JlMSaWV@cluster0.3x6ex.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+client = AsyncIOMotorClient(MONGODB_URL)
+db = client.dkbe  # 'forum'은 데이터베이스 이름입니다.
 
 # CORS 설정
 app.add_middleware(
@@ -60,34 +63,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 데이터베이스 설정
-DATABASE_URL = "mysql://root:root@localhost:3307/dkbe"
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from bson import ObjectId
+class Comment(BaseModel):
+    id: str = Field(alias="_id")
+    content: str
+    post_id: str
 
-engine = create_engine(DATABASE_URL, echo=True, pool_size=10, max_overflow=20)
+class Post(BaseModel):
+    id: str = Field(alias="_id")
+    title: str
+    content: str
+    comments: List[str] = []
+    created_at: datetime = Field(default_factory=datetime.now)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# 모델 정의
-class Post(Base):
-    __tablename__ = 'posts'
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(100), index=True)
-    content = Column(Text, nullable=False)
-    comments = relationship("Comment", back_populates="post")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 생성 날짜 추가
-
-
-class Comment(Base):
-    __tablename__ = 'comments'
-    id = Column(Integer, primary_key=True, index=True)
-    content = Column(String(255), nullable=False)
-    post_id = Column(Integer, ForeignKey('posts.id'))
-    post = relationship("Post", back_populates="comments")
-
-Base.metadata.create_all(bind=engine)
-
-# 스키마 정의
 class PostCreate(BaseModel):
     title: str
     content: str
@@ -97,50 +87,59 @@ class CommentCreate(BaseModel):
 
 # DB 의존성
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.post("/posts/", response_model=int)
-def create_post(post: PostCreate, db: Session = Depends(get_db)):
-    db_post = Post(title=post.title, content=post.content)
-    db.add(db_post)
-    db.commit()
-    db.refresh(db_post)
-    return db_post.id
+    return db
 
 class PostResponse(BaseModel):
-    id: int
+    id: int 
     title: str
     content: str
     created_at: datetime
 
-@app.get("/posts/", response_model=list[PostResponse])
-def read_posts(db: Session = Depends(get_db)):
-    return db.query(Post).order_by(Post.created_at.desc()).all()  # 최신순으로 정렬
+@app.post("/posts/", response_model=str)
+async def create_post(post: PostCreate, db=Depends(get_db)):
+    post_dict = post.dict()
+    post_dict['created_at'] = datetime.now()
+    result = await db.posts.insert_one(post_dict)
+    return str(result.inserted_id)
 
-@app.get("/posts/{post_id}", response_model=PostCreate)
-def read_post(post_id: int, db: Session = Depends(get_db)):
-    post = db.query(Post).filter(Post.id == post_id).first()
-    if post is None:
+@app.get("/posts/", response_model=List[Post])
+async def read_posts(db=Depends(get_db)):
+    posts = await db.posts.find().sort("created_at", -1).to_list(100)
+    # object id 를 string 으로 변환
+    for post in posts:
+        post["_id"] = str(post["_id"])
+    return posts
+
+@app.get("/posts/{post_id}", response_model=Post)
+async def read_post(post_id: str, db=Depends(get_db)):
+    post = await db.posts.find_one({"_id": ObjectId(post_id)})
+    if post:
+        post["_id"] = str(post["_id"])
+        return post
+    else:
         raise HTTPException(status_code=404, detail="Post not found")
-    return post
 
-@app.post("/posts/{post_id}/comments/", response_model=int)
-def add_comment_to_post(post_id: int, comment: CommentCreate, db: Session = Depends(get_db)):
-    db_comment = Comment(content=comment.content, post_id=post_id)
-    db.add(db_comment)
-    db.commit()
-    db.refresh(db_comment)
-    return db_comment.id
+@app.post("/posts/{post_id}/comments/", response_model=str)
+async def add_comment_to_post(post_id: str, comment: CommentCreate, db=Depends(get_db)):
+    comment_dict = comment.dict()
+    comment_dict['post_id'] = post_id
+    result = await db.comments.insert_one(comment_dict)
+    post = await db.posts.find_one({"_id": ObjectId(post_id)})
+    if post:
+        if "comments" not in post:
+            post['comments'] = []
+        post['comments'].append(result.inserted_id)
+        await db.posts.update_one({"_id": ObjectId(post_id)}, {"$set": post})
 
-@app.get("/posts/{post_id}/comments/", response_model=list[CommentCreate])
-def get_comments(post_id: int, db: Session = Depends(get_db)):
-    comments = db.query(Comment).filter(Comment.post_id == post_id).all()
+    return str(result.inserted_id)
+
+@app.get("/posts/{post_id}/comments/", response_model=List[Comment])
+async def get_comments(post_id: str, db=Depends(get_db)):
+    comments = await db.comments.find({"post_id": post_id}).to_list(100)
+    # object id 를 string 으로 변환
+    for comment in comments:
+        comment["_id"] = str(comment["_id"])
     return comments
-
 
 @app.get("/school-meals/{atpt_code}/{school_code}/{date}", response_class=PlainTextResponse)
 async def get_school_meals(atpt_code:str, school_code: str, date: str):
