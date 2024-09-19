@@ -10,15 +10,34 @@ from fastapi.responses import PlainTextResponse
 import os
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from bson import ObjectId
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+origins = [
+    "https://ssoxong.github.io",  # 귀하의 프론트엔드 URL
+    "http://localhost:5787",  # 로컬 개발시 테스트 용도
+    "http://localhost:8080",
+    "http://127.0.0.1:5787"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,  # 모든 출처 혹은 특정 출처 목록
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # 모든 HTTP 메소드 허용
+    allow_headers=["*"],  # 모든 HTTP 헤더 허용
 )
+load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL")
+client = AsyncIOMotorClient(MONGODB_URL)
+db = client.dkbe
+
+# DB 의존성
+def get_db():
+    return db
 
 html = f"""
 <!DOCTYPE html>
@@ -48,19 +67,6 @@ async def root():
 async def hello():
     return {'res': 'pong', 'version': __version__, "time": time()}
 
-
-
-load_dotenv()
-
-MONGODB_URL = os.getenv("MONGODB_URL")
-client = AsyncIOMotorClient(MONGODB_URL)
-db = client.dkbe
-
-# CORS 설정
-
-from pydantic import BaseModel, Field
-from typing import List, Optional
-from bson import ObjectId
 class Comment(BaseModel):
     id: str = Field(alias="_id")
     content: str
@@ -79,10 +85,6 @@ class PostCreate(BaseModel):
 
 class CommentCreate(BaseModel):
     content: str
-
-# DB 의존성
-def get_db():
-    return db
 
 class PostResponse(BaseModel):
     id: int 
