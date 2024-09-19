@@ -59,7 +59,7 @@ html = f"""
 </html>
 """
 
-@app.get("/")
+@app.get("/root")
 async def root():
     return HTMLResponse(html)
 
@@ -87,7 +87,7 @@ class CommentCreate(BaseModel):
     content: str
 
 class PostResponse(BaseModel):
-    id: int 
+    id: str = Field(alias="_id")
     title: str
     content: str
     created_at: datetime
@@ -105,6 +105,7 @@ async def read_posts(db=Depends(get_db)):
     # object id 를 string 으로 변환
     for post in posts:
         post["_id"] = str(post["_id"])
+
     return posts
 
 @app.get("/posts/{post_id}", response_model=Post)
@@ -125,14 +126,14 @@ async def add_comment_to_post(post_id: str, comment: CommentCreate, db=Depends(g
     if post:
         if "comments" not in post:
             post['comments'] = []
-        post['comments'].append(result.inserted_id)
+        post['comments'].append(str(result.inserted_id))
         await db.posts.update_one({"_id": ObjectId(post_id)}, {"$set": post})
 
     return str(result.inserted_id)
 
 @app.get("/posts/{post_id}/comments/", response_model=List[Comment])
 async def get_comments(post_id: str, db=Depends(get_db)):
-    comments = await db.comments.find({"post_id": post_id}).to_list(100)
+    comments = await db.comments.find({"post_id": post_id }).to_list(100)
     # object id 를 string 으로 변환
     for comment in comments:
         comment["_id"] = str(comment["_id"])
