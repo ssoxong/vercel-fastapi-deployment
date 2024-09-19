@@ -36,12 +36,8 @@ async def hello():
 
 from fastapi import FastAPI, HTTPException, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, DateTime, Column, Integer, String, Text, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session
 from pydantic import BaseModel
 from datetime import datetime
-from sqlalchemy.sql import func
 import requests
 from fastapi.responses import PlainTextResponse
 import os
@@ -50,9 +46,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 load_dotenv()
 
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb+srv://ssoxong:O510tE7q0JlMSaWV@cluster0.3x6ex.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+MONGODB_URL = os.getenv("MONGODB_URL")
 client = AsyncIOMotorClient(MONGODB_URL)
-db = client.dkbe  # 'forum'은 데이터베이스 이름입니다.
+db = client.dkbe
 
 # CORS 설정
 app.add_middleware(
