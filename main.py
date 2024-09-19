@@ -61,10 +61,11 @@ app.add_middleware(
 )
 
 # 데이터베이스 설정
-DATABASE_URL = "sqlite:///./forum.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+DATABASE_URL = "mysql://root:root@localhost:3307/dkbe"
 
+engine = create_engine(DATABASE_URL, echo=True, pool_size=10, max_overflow=20)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # 모델 정의
