@@ -1,8 +1,15 @@
 from time import time
-from fastapi import FastAPI, __version__
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-
+from fastapi import FastAPI, HTTPException, Depends, Response,  __version__
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from datetime import datetime
+import requests
+from fastapi.responses import PlainTextResponse
+import os
+from dotenv import load_dotenv
+from motor.motor_asyncio import AsyncIOMotorClient
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(
@@ -41,15 +48,7 @@ async def root():
 async def hello():
     return {'res': 'pong', 'version': __version__, "time": time()}
 
-from fastapi import FastAPI, HTTPException, Depends, Response
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from datetime import datetime
-import requests
-from fastapi.responses import PlainTextResponse
-import os
-from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
+
 
 load_dotenv()
 
